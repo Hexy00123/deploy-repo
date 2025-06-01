@@ -23,7 +23,7 @@ jobs:
       # Check whether SSH connection is working
       - name: Test SSH connection
         run: |
-          ssh default@${{ secrets.SERVER_IP }} 'echo "SSH connection successful"' 
+          ssh -o StrictHostKeyChecking=no default@${{ secrets.SERVER_IP }} 'echo "SSH connection successful"' 
 
       # Copy project files to server
       - name: Copy files to server
@@ -33,9 +33,9 @@ jobs:
       # Stop running containers
       - name: Stop running containers
         run: |
-          ssh default@${{ secrets.SERVER_IP }} 'cd /home/default/project && sudo docker compose down'
+          ssh -o StrictHostKeyChecking=no default@${{ secrets.SERVER_IP }} 'cd /home/default/project && sudo docker compose down'
 
       # Deploy with Docker Compose
       - name: Deploy with Docker Compose
         run: |
-          ssh default@${{ secrets.SERVER_IP }} 'cd /home/default/project && sudo docker compose up -d --build'
+          ssh -o StrictHostKeyChecking=no default@${{ secrets.SERVER_IP }} 'cd /home/default/project && sudo docker compose up -d --build'
