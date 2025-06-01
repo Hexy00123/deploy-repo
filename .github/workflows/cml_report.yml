@@ -1,0 +1,119 @@
+name: Generate ML Report
+
+on:
+  # event, when pipeline triggered
+  push:
+    branches:
+      - main
+    paths:
+      - 'models/**'
+      - 'backend/**'
+  # with this you can run workflow manually
+  workflow_dispatch:
+
+# pipeline itself
+jobs:
+  # step 1
+  run-tests:
+
+    # environment
+    runs-on: ubuntu-latest
+    steps:
+      # clones repository content to
+      # environment
+      - uses: actions/checkout@v4
+
+      # install libs for the project
+      - name: Install Dependencies
+        run: python -m pip install -r requirements.txt
+
+      # runs backend & testing it with predicting on the file
+      - name: Run Backend and Test Predict Batch
+        run: |
+          cd backend
+          python backend.py &
+          BACKEND_PID=$!
+
+          for i in {1..20}; do
+            if curl -s http://localhost:8000/health | grep -q healthy; then
+              echo "Backend is up!"
+              break
+            fi
+            sleep 1
+          done
+
+          RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X 'POST' \
+            'http://localhost:8000/predict_batch' \
+            -H 'accept: application/json' \
+            -H 'Content-Type: multipart/form-data' \
+            -F 'file=@../data/bank-sample.csv;type=text/csv')
+
+          if [ "$RESPONSE" -eq 200 ]; then
+            echo "predict_batch endpoint test passed."
+          else
+            echo "predict_batch endpoint test failed with status $RESPONSE"
+            cat response.json
+            kill $BACKEND_PID
+            exit 1
+          fi
+
+          kill $BACKEND_PID
+
+  # generates best_model_report.md in reports folder
+  generate-report:
+    needs: run-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # clones repository content to
+      # environment
+      - uses: actions/checkout@v4
+
+      # puts all data about model in .md file
+      - name: Generate Report
+        run: | 
+          precision=$(jq '.precision' models/best/metadata.json)
+          recall=$(jq '.recall' models/best/metadata.json)
+          f1=$(jq '.f1' models/best/metadata.json)
+          model_type=$(jq -r '.model_filename' models/best/metadata.json | sed -E 's/model_(.*)\.joblib/\1/')
+
+          mkdir -p reports
+          report_path=reports/best_model_report.md
+
+          echo "# Best Model Report" > "$report_path"
+          echo "" >> "$report_path"
+          echo "## Model Info" >> "$report_path"
+          echo "" >> "$report_path"
+          echo "- **Model Type**: $model_type" >> "$report_path"
+
+          echo "- **Parameters**:" >> "$report_path"
+          jq -r '.params | to_entries[] | "  - \(.key): \(.value)"' models/best/metadata.json >> "$report_path"
+          echo "" >> "$report_path"
+
+          echo "## Metrics" >> "$report_path"
+          echo "" >> "$report_path"
+          echo "| Metric    | Value |" >> "$report_path"
+          echo "|-----------|-------|" >> "$report_path"
+          echo "| Precision | $precision |" >> "$report_path"
+          echo "| Recall    | $recall |" >> "$report_path"
+          echo "| F1 Score  | $f1 |" >> "$report_path"
+          echo "" >> "$report_path"
+
+          echo "## Images" >> "$report_path"
+          echo "" >> "$report_path"
+          for img in models/best/*.png; do
+            rel_path=$(realpath --relative-to=reports "$img")
+            echo "![Image]($rel_path)" >> "$report_path"
+          done
+
+      # commits the report & pushes to the repository
+      - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add reports/best_model_report.md
+          git commit -m "ci: Best model report update" || echo "No changes to commit"
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}

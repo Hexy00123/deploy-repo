@@ -1,0 +1,8 @@
+pandas
+scikit-learn
+joblib
+fastapi
+uvicorn
+category-encoders
+dill
+python-multipart

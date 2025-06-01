@@ -1,0 +1,10 @@
+scikit-learn
+streamlit
+uvicorn
+category-encoders
+requests
+joblib
+fastapi 
+uvicorn 
+python-multipart
+dill
