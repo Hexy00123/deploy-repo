@@ -1,0 +1,35 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no default@${{ secrets.SERVER_IP }} 'echo "SSH connection successful"' 
+
+      - name: Copy files to server
+        run: |
+          bash scripts/send_to_remote.sh ${{ secrets.SERVER_IP }}
+
+      - name: Stop running containers
+        run: |
+          ssh -o StrictHostKeyChecking=no default@${{ secrets.SERVER_IP }} 'cd /home/default/project && sudo docker compose down'
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -o StrictHostKeyChecking=no default@${{ secrets.SERVER_IP }} 'cd /home/default/project && sudo docker compose up -d --build'
