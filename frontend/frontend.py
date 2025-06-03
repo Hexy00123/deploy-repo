@@ -17,7 +17,7 @@ def predict_batch(file):
     response = requests.post(f"{BACKEND_URL}/predict_batch", files=files)
     return response.json()
 
-st.title("Backend Interaction")
+st.title("Backend Interaction DEMO")
 
 with st.expander("Health Check", expanded=False):
     if st.button("Check Health"):
